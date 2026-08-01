@@ -1,0 +1,37 @@
+name: airshare_frontend
+description: "A high-speed cross-platform internet file sharing application."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # UI Icons & Components
+  cupertino_icons: ^1.0.8
+  percent_indicator: ^4.2.5
+
+  # Real-time Signaling & WebRTC Data Transfer
+  socket_io_client: ^3.1.6
+  flutter_webrtc: ^1.5.2
+
+  # File Management & System Access
+  file_picker: ^8.1.7
+  path_provider: ^2.1.6
+  permission_handler: ^11.3.1
+  open_file: ^3.3.2
+  desktop_drop: ^0.7.1
+  google_fonts: ^8.2.0
+  encrypt: ^5.0.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
