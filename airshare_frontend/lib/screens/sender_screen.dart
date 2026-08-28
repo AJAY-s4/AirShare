@@ -32,6 +32,7 @@ class _SenderScreenState extends State<SenderScreen> {
   bool _isCancelled = false;
   bool _isTransferComplete = false;
   bool _receiverReadyForTransfer = false;
+  bool _receiverSavedFile = false;
   int _acknowledgedBytes = 0;
 
   double _progress = 0.0;
@@ -39,7 +40,7 @@ class _SenderScreenState extends State<SenderScreen> {
   String _statusText = 'Select files or Drag & Drop';
 
   static const int chunkSize =
-      64 * 1024; // 64 KB (Optimized for higher throughput)
+      16 * 1024; // 16 KB (Safe for WebRTC max message size)
 
   Future<void> _pickFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -116,6 +117,8 @@ class _SenderScreenState extends State<SenderScreen> {
         if (mounted && data != null && data['ackBytes'] != null) {
           if (data['ackBytes'] == -1) {
             _receiverReadyForTransfer = true;
+          } else if (data['ackBytes'] == -2) {
+            _receiverSavedFile = true;
           } else {
             _acknowledgedBytes = data['ackBytes'];
           }
@@ -212,9 +215,18 @@ class _SenderScreenState extends State<SenderScreen> {
         break;
       }
 
+      _receiverSavedFile = false;
       await _transferSingleFile(file);
 
       if (_isCancelled) break;
+
+      // Wait for receiver to explicitly acknowledge file saved before moving to the next file
+      int savedWaitMs = 0;
+      while (!_receiverSavedFile && savedWaitMs < 60000) {
+        if (_isCancelled) break;
+        await Future.delayed(const Duration(milliseconds: 50));
+        savedWaitMs += 50;
+      }
 
       // Wait a moment between files
       await Future.delayed(const Duration(milliseconds: 500));
@@ -258,8 +270,8 @@ class _SenderScreenState extends State<SenderScreen> {
             bytesSent += chunk.length;
 
             // Flow control: Use WebRTC's internal bufferedAmount to prevent overwhelming the SCTP queue
-            // A limit of 1MB allows the network pipe to stay fully saturated during speed spikes
-            while (_webrtcService.bufferedAmount > 1024 * 1024) {
+            // A limit of 256KB guarantees the underlying OS network buffer is never overfilled, preventing silent packet drops
+            while (_webrtcService.bufferedAmount > 256 * 1024) {
               if (_isCancelled) return;
               await Future.delayed(const Duration(milliseconds: 5));
             }
@@ -273,8 +285,8 @@ class _SenderScreenState extends State<SenderScreen> {
 
             bytesSent += chunk.length;
 
-            // Flow control: Wait if we are more than 2MB ahead of ACKs to fully utilize the TCP connection
-            while (bytesSent - _acknowledgedBytes > 2 * 1024 * 1024) {
+            // Flow control: Wait if we are more than 1MB ahead of ACKs to prevent backend RAM bloat
+            while (bytesSent - _acknowledgedBytes > 1024 * 1024) {
               if (_isCancelled) return;
               await Future.delayed(const Duration(milliseconds: 5));
             }
@@ -315,8 +327,8 @@ class _SenderScreenState extends State<SenderScreen> {
               bytesSent += chunk.length;
 
               // Flow control: Use WebRTC's internal bufferedAmount to prevent overwhelming the SCTP queue
-              // A limit of 1MB allows the network pipe to stay fully saturated during speed spikes
-              while (_webrtcService.bufferedAmount > 1024 * 1024) {
+              // A limit of 256KB guarantees the underlying OS network buffer is never overfilled, preventing silent packet drops
+              while (_webrtcService.bufferedAmount > 256 * 1024) {
                 if (_isCancelled) return;
                 await Future.delayed(const Duration(milliseconds: 5));
               }
@@ -330,8 +342,8 @@ class _SenderScreenState extends State<SenderScreen> {
 
               bytesSent += chunk.length;
 
-              // Flow control: Wait if we are more than 2MB ahead of ACKs to fully utilize the TCP connection
-              while (bytesSent - _acknowledgedBytes > 2 * 1024 * 1024) {
+              // Flow control: Wait if we are more than 1MB ahead of ACKs to prevent backend RAM bloat
+              while (bytesSent - _acknowledgedBytes > 1024 * 1024) {
                 if (_isCancelled) return;
                 await Future.delayed(const Duration(milliseconds: 5));
               }

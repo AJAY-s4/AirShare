@@ -275,45 +275,55 @@ class _ReceiverScreenState extends State<ReceiverScreen> {
   }
 
   Future<void> _saveReceivedFile() async {
+    // Capture state variables to prevent race conditions if next file starts
+    final currentFileName = _fileName;
+    final currentTempFile = _tempFile;
+    final currentSink = _fileSink;
+    final currentReceivedChunks = kIsWeb ? List<Uint8List>.from(_receivedChunks) : <Uint8List>[];
+
     try {
       if (kIsWeb) {
-        final totalLength = _receivedChunks.fold<int>(0, (sum, element) => sum + element.length);
+        final totalLength = currentReceivedChunks.fold<int>(0, (sum, element) => sum + element.length);
         final bytes = Uint8List(totalLength);
         int offset = 0;
-        for (final chunk in _receivedChunks) {
+        for (final chunk in currentReceivedChunks) {
           bytes.setRange(offset, offset + chunk.length, chunk);
           offset += chunk.length;
         }
-        await file_utils.FileUtils.saveWebFile(bytes, _fileName);
+        await file_utils.FileUtils.saveWebFile(bytes, currentFileName);
       } else {
-        await _fileSink?.flush();
-        await _fileSink?.close();
-        _fileSink = null;
+        await currentSink?.flush();
+        await currentSink?.close();
         
-        if (_tempFile != null && await _tempFile!.exists()) {
-          await file_utils.FileUtils.moveToDownloads(_tempFile!, _fileName);
+        if (currentTempFile != null && await currentTempFile.exists()) {
+          await file_utils.FileUtils.moveToDownloads(currentTempFile, currentFileName);
         }
       }
 
       if (mounted) {
         setState(() {
-          _statusText = "Saved $_fileName to Downloads!";
+          _statusText = "Saved $currentFileName to Downloads!";
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _statusText = "Failed to save $_fileName: $e";
+          _statusText = "Failed to save $currentFileName: $e";
         });
       }
     } finally {
       if (!kIsWeb) {
-         await _fileSink?.close();
-         _fileSink = null;
-         if (_tempFile != null && await _tempFile!.exists()) {
-           try { await _tempFile!.delete(); } catch(_) {}
+         await currentSink?.close();
+         if (currentTempFile != null && await currentTempFile.exists()) {
+           try { await currentTempFile.delete(); } catch(_) {}
          }
       }
+      
+      // Signal to the sender that the file is safely saved and ready for next file
+      _socketService.socket?.emit('chunk-ack', {
+        'pin': _currentPin,
+        'ackBytes': -2
+      });
     }
   }
 
