@@ -32,6 +32,7 @@ class _SenderScreenState extends State<SenderScreen> {
   bool _isCancelled = false;
   bool _isTransferComplete = false;
   bool _receiverReadyForTransfer = false;
+  bool _receiverSavedFile = false;
   int _acknowledgedBytes = 0;
 
   double _progress = 0.0;
@@ -116,6 +117,8 @@ class _SenderScreenState extends State<SenderScreen> {
         if (mounted && data != null && data['ackBytes'] != null) {
           if (data['ackBytes'] == -1) {
             _receiverReadyForTransfer = true;
+          } else if (data['ackBytes'] == -2) {
+            _receiverSavedFile = true;
           } else {
             _acknowledgedBytes = data['ackBytes'];
           }
@@ -212,9 +215,18 @@ class _SenderScreenState extends State<SenderScreen> {
         break;
       }
 
+      _receiverSavedFile = false;
       await _transferSingleFile(file);
 
       if (_isCancelled) break;
+
+      // Wait for receiver to explicitly acknowledge file saved before moving to the next file
+      int savedWaitMs = 0;
+      while (!_receiverSavedFile && savedWaitMs < 60000) {
+        if (_isCancelled) break;
+        await Future.delayed(const Duration(milliseconds: 50));
+        savedWaitMs += 50;
+      }
 
       // Wait a moment between files
       await Future.delayed(const Duration(milliseconds: 500));
