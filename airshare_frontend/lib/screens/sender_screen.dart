@@ -184,7 +184,6 @@ class _SenderScreenState extends State<SenderScreen> {
   }
 
   Future<void> _startTransferLoop() async {
-    if (_isTransferring) return;
     setState(() {
       _isTransferring = true;
       _isRelayFallback = _isRelayFallback; // preserve relay state
