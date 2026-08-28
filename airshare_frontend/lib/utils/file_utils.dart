@@ -79,9 +79,9 @@ class FileUtils {
   }
 
   /// Save an in-memory Web file
-  static Future<String?> saveWebFile(Uint8List bytes, String fileName) async {
+  static Future<String?> saveWebFile(List<Uint8List> chunks, String fileName) async {
     if (kIsWeb) {
-      downloadWebFile(bytes, fileName);
+      downloadWebFile(chunks, fileName);
       return null;
     }
     throw UnsupportedError('saveWebFile called on native platform');

@@ -2,8 +2,8 @@
 import 'dart:html' as html;
 import 'dart:typed_data';
 
-void downloadWebFile(Uint8List bytes, String fileName) {
-  final blob = html.Blob([bytes], 'application/octet-stream');
+void downloadWebFile(List<Uint8List> chunks, String fileName) {
+  final blob = html.Blob(chunks, 'application/octet-stream');
   final url = html.Url.createObjectUrlFromBlob(blob);
   
   final anchor = html.AnchorElement(href: url)

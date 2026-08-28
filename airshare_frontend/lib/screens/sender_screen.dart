@@ -44,7 +44,7 @@ class _SenderScreenState extends State<SenderScreen> {
 
   Future<void> _pickFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
-      withData: kIsWeb,
+      withReadStream: kIsWeb,
       allowMultiple: true,
     );
 
@@ -66,15 +66,15 @@ class _SenderScreenState extends State<SenderScreen> {
     List<PlatformFile> droppedFiles = [];
     for (var xfile in details.files) {
       final length = await xfile.length();
-      Uint8List? bytes;
+      Stream<List<int>>? readStream;
       if (kIsWeb) {
-        bytes = await xfile.readAsBytes();
+        readStream = xfile.openRead();
       }
       droppedFiles.add(PlatformFile(
         name: xfile.name,
         size: length,
         path: xfile.path,
-        bytes: bytes,
+        readStream: readStream,
       ));
     }
     if (droppedFiles.isNotEmpty) {
@@ -253,63 +253,15 @@ class _SenderScreenState extends State<SenderScreen> {
     final bool useWebRTC = _isConnected;
 
     try {
-      if (kIsWeb && file.bytes != null) {
-        Uint8List bytes = file.bytes!;
-        for (int i = 0; i < bytes.length; i += chunkSize) {
-          if (_isCancelled) return;
-
-          int end =
-              (i + chunkSize < bytes.length) ? i + chunkSize : bytes.length;
-          Uint8List chunk = bytes.sublist(i, end);
-
-          if (useWebRTC) {
-            bool sent = _webrtcService.sendChunk(chunk);
-            if (!sent) {
-              throw Exception("WebRTC channel closed during transfer");
-            }
-            bytesSent += chunk.length;
-
-            // Flow control: Use WebRTC's internal bufferedAmount to prevent overwhelming the SCTP queue
-            // A limit of 256KB guarantees the underlying OS network buffer is never overfilled, preventing silent packet drops
-            while (_webrtcService.bufferedAmount > 256 * 1024) {
-              if (_isCancelled) return;
-              await Future.delayed(const Duration(milliseconds: 5));
-            }
-          } else {
-            // Encrypt and Route via rock-solid Socket.IO TCP relay
-            final encryptedChunk = CryptoUtils.encryptChunk(chunk, _pin!);
-            _socketService.socket?.emit('file-chunk', {
-              'pin': _pin,
-              'chunk': encryptedChunk,
-            });
-
-            bytesSent += chunk.length;
-
-            // Flow control: Wait if we are more than 1MB ahead of ACKs to prevent backend RAM bloat
-            while (bytesSent - _acknowledgedBytes > 1024 * 1024) {
-              if (_isCancelled) return;
-              await Future.delayed(const Duration(milliseconds: 5));
-            }
-          }
-
-          _updateProgress(bytesSent, totalBytes, stopwatch);
-        }
-
-        // Send robust EOF signal over the same channel
-        final eofChunk =
-            Uint8List.fromList('___EOF_AIRSHARE_TRANSFER___'.codeUnits);
-        if (useWebRTC) {
-          _webrtcService.sendChunk(eofChunk);
-        } else {
-          _socketService.socket?.emit('file-chunk', {
-            'pin': _pin,
-            'chunk': eofChunk,
-          });
-        }
+      Stream<List<int>>? stream;
+      if (kIsWeb && file.readStream != null) {
+        stream = file.readStream;
       } else if (file.path != null) {
         final f = File(file.path!);
-        final stream = f.openRead();
+        stream = f.openRead();
+      }
 
+      if (stream != null) {
         await for (List<int> bytes in stream) {
           if (_isCancelled) return;
           for (int i = 0; i < bytes.length; i += chunkSize) {

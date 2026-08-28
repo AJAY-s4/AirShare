@@ -283,14 +283,7 @@ class _ReceiverScreenState extends State<ReceiverScreen> {
 
     try {
       if (kIsWeb) {
-        final totalLength = currentReceivedChunks.fold<int>(0, (sum, element) => sum + element.length);
-        final bytes = Uint8List(totalLength);
-        int offset = 0;
-        for (final chunk in currentReceivedChunks) {
-          bytes.setRange(offset, offset + chunk.length, chunk);
-          offset += chunk.length;
-        }
-        await file_utils.FileUtils.saveWebFile(bytes, currentFileName);
+        await file_utils.FileUtils.saveWebFile(currentReceivedChunks, currentFileName);
       } else {
         await currentSink?.flush();
         await currentSink?.close();
