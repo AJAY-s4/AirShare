@@ -39,7 +39,7 @@ class _SenderScreenState extends State<SenderScreen> {
   String _statusText = 'Select files or Drag & Drop';
 
   static const int chunkSize =
-      64 * 1024; // 64 KB (Optimized for higher throughput)
+      16 * 1024; // 16 KB (Safe for WebRTC max message size)
 
   Future<void> _pickFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -258,8 +258,8 @@ class _SenderScreenState extends State<SenderScreen> {
             bytesSent += chunk.length;
 
             // Flow control: Use WebRTC's internal bufferedAmount to prevent overwhelming the SCTP queue
-            // A limit of 1MB allows the network pipe to stay fully saturated during speed spikes
-            while (_webrtcService.bufferedAmount > 1024 * 1024) {
+            // A limit of 256KB guarantees the underlying OS network buffer is never overfilled, preventing silent packet drops
+            while (_webrtcService.bufferedAmount > 256 * 1024) {
               if (_isCancelled) return;
               await Future.delayed(const Duration(milliseconds: 5));
             }
@@ -273,8 +273,8 @@ class _SenderScreenState extends State<SenderScreen> {
 
             bytesSent += chunk.length;
 
-            // Flow control: Wait if we are more than 2MB ahead of ACKs to fully utilize the TCP connection
-            while (bytesSent - _acknowledgedBytes > 2 * 1024 * 1024) {
+            // Flow control: Wait if we are more than 1MB ahead of ACKs to prevent backend RAM bloat
+            while (bytesSent - _acknowledgedBytes > 1024 * 1024) {
               if (_isCancelled) return;
               await Future.delayed(const Duration(milliseconds: 5));
             }
@@ -315,8 +315,8 @@ class _SenderScreenState extends State<SenderScreen> {
               bytesSent += chunk.length;
 
               // Flow control: Use WebRTC's internal bufferedAmount to prevent overwhelming the SCTP queue
-              // A limit of 1MB allows the network pipe to stay fully saturated during speed spikes
-              while (_webrtcService.bufferedAmount > 1024 * 1024) {
+              // A limit of 256KB guarantees the underlying OS network buffer is never overfilled, preventing silent packet drops
+              while (_webrtcService.bufferedAmount > 256 * 1024) {
                 if (_isCancelled) return;
                 await Future.delayed(const Duration(milliseconds: 5));
               }
@@ -330,8 +330,8 @@ class _SenderScreenState extends State<SenderScreen> {
 
               bytesSent += chunk.length;
 
-              // Flow control: Wait if we are more than 2MB ahead of ACKs to fully utilize the TCP connection
-              while (bytesSent - _acknowledgedBytes > 2 * 1024 * 1024) {
+              // Flow control: Wait if we are more than 1MB ahead of ACKs to prevent backend RAM bloat
+              while (bytesSent - _acknowledgedBytes > 1024 * 1024) {
                 if (_isCancelled) return;
                 await Future.delayed(const Duration(milliseconds: 5));
               }
