@@ -125,19 +125,26 @@ class _SenderScreenState extends State<SenderScreen> {
         }
       });
 
-      await _webrtcService.initPeerConnection(_pin!, true);
-
       _socketService.socket?.off('receiver-joined');
       _socketService.socket?.on('receiver-joined', (_) async {
         if (mounted) {
           setState(() {
-            _statusText = 'Receiver joined. Establishing P2P link...';
+            _statusText = 'User joined. Initializing P2P...';
+          });
+          await _webrtcService.initPeerConnection(_pin!, true);
+          await _webrtcService.createAndSendOffer(_pin!);
+
+          // 10s Timeout for WebRTC connection
+          Future.delayed(const Duration(seconds: 10), () {
+            if (mounted && !_isConnected && _selectedPlatformFiles.isNotEmpty && !_isTransferring) {
+              setState(() {
+                _statusText = 'P2P timeout. Falling back to relay...';
+              });
+              _startTransferLoop();
+            }
           });
         }
-        await _webrtcService.createAndSendOffer(_pin!);
-      });
-
-      _socketService.socket?.off('cancel-transfer');
+      });  _socketService.socket?.off('cancel-transfer');
       _socketService.socket?.on('cancel-transfer', (_) {
         if (mounted && _isTransferring) {
           setState(() {
@@ -170,6 +177,9 @@ class _SenderScreenState extends State<SenderScreen> {
   }
 
   Future<void> _startTransferLoop() async {
+    if (_isTransferring) return;
+    setState(() => _isTransferring = true);
+
     for (int i = _currentFileIndex; i < _selectedPlatformFiles.length; i++) {
       if (_isCancelled) break;
 

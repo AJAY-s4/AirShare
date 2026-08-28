@@ -106,6 +106,7 @@ class _ReceiverScreenState extends State<ReceiverScreen> {
 
     if (success) {
       setState(() {
+        _isJoining = false;
         _statusText = "Joined room. Setting up P2P connection...";
       });
 
