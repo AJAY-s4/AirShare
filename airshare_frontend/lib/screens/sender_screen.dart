@@ -162,8 +162,9 @@ class _SenderScreenState extends State<SenderScreen> {
   }
 
   Future<void> _startSending() async {
-    if (_selectedPlatformFiles.isEmpty || _pin == null || _isTransferring)
+    if (_selectedPlatformFiles.isEmpty || _pin == null || _isTransferring) {
       return;
+    }
 
     setState(() {
       _isTransferring = true;

@@ -493,7 +493,7 @@ class _ReceiverScreenState extends State<ReceiverScreen> {
                         ),
                         const SizedBox(height: 32),
                         
-                        if (!_isConnected && _pin == null)
+                        if (!_isConnected && _currentPin == null)
                           ElevatedButton.icon(
                             onPressed: _isJoining ? null : _joinRoom,
                             icon: const Icon(Icons.satellite_alt_rounded),
