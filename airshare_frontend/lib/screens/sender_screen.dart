@@ -274,11 +274,12 @@ class _SenderScreenState extends State<SenderScreen> {
       if (stream != null) {
         await for (List<int> bytes in stream) {
           if (_isCancelled) return;
-          for (int i = 0; i < bytes.length; i += chunkSize) {
+          for (int i = 0; i < bytes.length; i += (useWebRTC ? chunkSize : 512 * 1024)) {
             if (_isCancelled) return;
 
+            int currentChunkSize = useWebRTC ? chunkSize : 512 * 1024;
             int end =
-                (i + chunkSize < bytes.length) ? i + chunkSize : bytes.length;
+                (i + currentChunkSize < bytes.length) ? i + currentChunkSize : bytes.length;
             Uint8List chunk = Uint8List.fromList(bytes.sublist(i, end));
 
             if (useWebRTC) {
@@ -304,8 +305,8 @@ class _SenderScreenState extends State<SenderScreen> {
 
               bytesSent += chunk.length;
 
-              // Flow control: Wait if we are more than 1MB ahead of ACKs to prevent backend RAM bloat
-              while (bytesSent - _acknowledgedBytes > 1024 * 1024) {
+              // Flow control: Wait if we are more than 8MB ahead of ACKs to prevent backend RAM bloat
+              while (bytesSent - _acknowledgedBytes > 8 * 1024 * 1024) {
                 if (_isCancelled) return;
                 await Future.delayed(const Duration(milliseconds: 5));
               }

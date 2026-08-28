@@ -243,7 +243,7 @@ class _ReceiverScreenState extends State<ReceiverScreen> {
     _totalBytesReceived += chunk.length;
 
     // Flow control: Send ACK back to sender via Socket to release their buffer
-    if (_totalBytesReceived - _lastAckedBytes >= 512 * 1024 || _totalBytesReceived == _expectedFileSize) {
+    if (_totalBytesReceived - _lastAckedBytes >= 2048 * 1024 || _totalBytesReceived == _expectedFileSize) {
        _socketService.socket?.emit('chunk-ack', {
          'pin': _currentPin,
          'ackBytes': _totalBytesReceived
@@ -493,7 +493,7 @@ class _ReceiverScreenState extends State<ReceiverScreen> {
                         ),
                         const SizedBox(height: 32),
                         
-                        if (!_isConnected)
+                        if (!_isConnected && _pin == null)
                           ElevatedButton.icon(
                             onPressed: _isJoining ? null : _joinRoom,
                             icon: const Icon(Icons.satellite_alt_rounded),
