@@ -26,6 +26,8 @@ dependencies:
   open_file: ^3.3.2
   desktop_drop: ^0.7.1
   google_fonts: ^8.2.0
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^5.2.2
   encrypt: ^5.0.3
 
 dev_dependencies:

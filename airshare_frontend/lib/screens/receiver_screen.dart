@@ -2,6 +2,9 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import 'package:file_picker/file_picker.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/services.dart';
 import 'package:percent_indicator/linear_percent_indicator.dart';
 import '../services/socket_service.dart';
@@ -175,6 +178,47 @@ class _ReceiverScreenState extends State<ReceiverScreen> {
         _statusText = "Failed to join room. Check the PIN.";
       });
     }
+  }
+
+  Future<void> _scanQR() async {
+    if (!kIsWeb) {
+      final status = await Permission.camera.request();
+      if (!status.isGranted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Camera permission is required to scan QR codes.')),
+          );
+        }
+        return;
+      }
+    }
+
+    if (!mounted) return;
+    
+    // Open scanner modal
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          appBar: AppBar(title: const Text('Scan AirShare QR')),
+          body: MobileScanner(
+            onDetect: (capture) {
+              final List<Barcode> barcodes = capture.barcodes;
+              for (final barcode in barcodes) {
+                if (barcode.rawValue != null && barcode.rawValue!.startsWith('airshare:')) {
+                  final scannedPin = barcode.rawValue!.substring(9);
+                  if (scannedPin.length == 6) {
+                    Navigator.of(context).pop();
+                    _pinController.text = scannedPin;
+                    _joinRoom();
+                    return;
+                  }
+                }
+              }
+            },
+          ),
+        ),
+      ),
+    );
   }
 
   void _prepareForFile(dynamic rawMeta) async {
@@ -515,17 +559,30 @@ class _ReceiverScreenState extends State<ReceiverScreen> {
                             label: Text(_isJoining ? 'Connecting...' : 'Connect to Sender',
                                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: isDark ? const Color(0xFF8B5CF6) : const Color(0xFF7C3AED),
+                              backgroundColor: isDark ? const Color(0xFF3B82F6) : const Color(0xFF2563EB),
                               foregroundColor: Colors.white,
                               disabledBackgroundColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
                               disabledForegroundColor: isDark ? const Color(0xFF475569) : const Color(0xFF94A3B8),
                               padding: const EdgeInsets.symmetric(vertical: 20),
-                              elevation: _isJoining ? 0 : 8,
-                              shadowColor: (isDark ? const Color(0xFF8B5CF6) : const Color(0xFF7C3AED)).withAlpha(100),
+                              elevation: (_pinController.text.length < 6 || _isJoining || _isConnected) ? 0 : 8,
+                              shadowColor: (isDark ? const Color(0xFF3B82F6) : const Color(0xFF2563EB)).withAlpha(100),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                             ),
                           ),
                           
+                        const SizedBox(height: 16),
+                        if (!_isJoining && !_isConnected)
+                          OutlinedButton.icon(
+                            onPressed: _scanQR,
+                            icon: const Icon(Icons.qr_code_scanner_rounded),
+                            label: const Text('Scan QR Code', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB),
+                              side: BorderSide(color: isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB), width: 2),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            ),
+                          ),
                         const SizedBox(height: 24),
                         Center(
                           child: Text(

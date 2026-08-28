@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:percent_indicator/linear_percent_indicator.dart';
+import 'package:path/path.dart' as p;
+import 'package:qr_flutter/qr_flutter.dart';
 import '../services/socket_service.dart';
 import '../services/webrtc_service.dart';
 import '../utils/file_utils.dart';
@@ -240,15 +242,16 @@ class _SenderScreenState extends State<SenderScreen> {
       if (_isCancelled) break;
 
       // Wait for receiver to explicitly acknowledge file saved before moving to the next file
+      // Wait slightly longer gracefully to ensure disk I/O completes on the receiver side
       int savedWaitMs = 0;
-      while (!_receiverSavedFile && savedWaitMs < 60000) {
+      while (!_receiverSavedFile && savedWaitMs < 120000) {
         if (_isCancelled) break;
-        await Future.delayed(const Duration(milliseconds: 50));
-        savedWaitMs += 50;
+        await Future.delayed(const Duration(milliseconds: 100));
+        savedWaitMs += 100;
       }
 
-      // Wait a moment between files
-      await Future.delayed(const Duration(milliseconds: 500));
+      // Wait a moment between files to ensure cleanly separated state
+      await Future.delayed(const Duration(milliseconds: 1000));
     }
 
     if (mounted && !_isCancelled) {
@@ -283,10 +286,10 @@ class _SenderScreenState extends State<SenderScreen> {
       if (stream != null) {
         await for (List<int> bytes in stream) {
           if (_isCancelled) return;
-          for (int i = 0; i < bytes.length; i += (useWebRTC ? chunkSize : 512 * 1024)) {
+          for (int i = 0; i < bytes.length; i += (useWebRTC ? chunkSize : 1024 * 1024)) {
             if (_isCancelled) return;
 
-            int currentChunkSize = useWebRTC ? chunkSize : 512 * 1024;
+            int currentChunkSize = useWebRTC ? chunkSize : 1024 * 1024;
             int end =
                 (i + currentChunkSize < bytes.length) ? i + currentChunkSize : bytes.length;
             Uint8List chunk = Uint8List.fromList(bytes.sublist(i, end));
@@ -298,9 +301,8 @@ class _SenderScreenState extends State<SenderScreen> {
               }
               bytesSent += chunk.length;
 
-              // Flow control: Use WebRTC's internal bufferedAmount to prevent overwhelming the SCTP queue
-              // A limit of 256KB guarantees the underlying OS network buffer is never overfilled, preventing silent packet drops
-              while (_webrtcService.bufferedAmount > 256 * 1024) {
+              // Flow control: Use WebRTC's internal bufferedAmount
+              while (_webrtcService.bufferedAmount > 1024 * 1024) {
                 if (_isCancelled) return;
                 await Future.delayed(const Duration(milliseconds: 5));
               }
@@ -314,14 +316,15 @@ class _SenderScreenState extends State<SenderScreen> {
 
               bytesSent += chunk.length;
 
-              // Flow control: Wait if we are more than 8MB ahead of ACKs to prevent backend RAM bloat
-              while (bytesSent - _acknowledgedBytes > 8 * 1024 * 1024) {
+              // Flow control: Wait if we are more than 16MB ahead of ACKs to prevent backend RAM bloat
+              while (bytesSent - _acknowledgedBytes > 16 * 1024 * 1024) {
                 if (_isCancelled) return;
                 await Future.delayed(const Duration(milliseconds: 5));
               }
             }
 
-            _updateProgress(bytesSent, totalBytes, stopwatch);
+            // Sync UI progress perfectly with receiver's acknowledged bytes
+            _updateProgress(useWebRTC ? bytesSent : _acknowledgedBytes, totalBytes, stopwatch);
           }
         }
 
@@ -707,6 +710,28 @@ class _SenderScreenState extends State<SenderScreen> {
                   ),
                 ),
               ),
+              if (_pin != null) ...[
+                const SizedBox(height: 24),
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: QrImageView(
+                      data: 'airshare:$_pin',
+                      version: QrVersions.auto,
+                      size: 200.0,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text('Or scan this QR code with the receiver device', 
+                  style: TextStyle(color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B), fontSize: 14), 
+                  textAlign: TextAlign.center,
+                ),
+              ],
               const SizedBox(height: 40),
               
               Row(
