@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:ui';
@@ -25,6 +24,7 @@ class _ReceiverScreenState extends State<ReceiverScreen> {
 
   bool _isJoining = false;
   bool _isConnected = false;
+  bool _isRelayFallback = false;
   bool _isReceiving = false;
   bool _isCancelled = false;
   bool _hasSavedCurrentFile = false;
@@ -111,15 +111,30 @@ class _ReceiverScreenState extends State<ReceiverScreen> {
       });
 
       _webrtcService.onConnectionStateChange = (connected) {
-        if (mounted) {
+        if (!mounted) return;
+        if (!connected && (_isRelayFallback || _isReceiving)) {
+          // Suppress late WebRTC disconnect — relay or active receiving takes priority
+          return;
+        }
+        setState(() {
+          _isConnected = connected;
+          if (connected) {
+            _statusText = "Connected via P2P! Waiting for sender...";
+          } else if (!_isRelayFallback) {
+            _statusText = "Peer Disconnected";
+          }
+        });
+      };
+
+      // 10s Timeout: if WebRTC never establishes, switch to relay mode UI
+      Future.delayed(const Duration(seconds: 10), () {
+        if (mounted && !_isConnected && !_isReceiving) {
           setState(() {
-            _isConnected = connected;
-            _statusText = connected
-                ? "Connected! Waiting for sender..."
-                : "Peer Disconnected";
+            _isRelayFallback = true;
+            _statusText = "Connected via Relay. Waiting for sender...";
           });
         }
-      };
+      });
 
       _webrtcService.onDataReceived = (chunk) {
         _handleIncomingChunk(chunk);

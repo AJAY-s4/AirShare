@@ -28,6 +28,7 @@ class _SenderScreenState extends State<SenderScreen> {
   final List<PlatformFile> _selectedPlatformFiles = [];
   int _currentFileIndex = 0;
   bool _isConnected = false;
+  bool _isRelayFallback = false;
   bool _isTransferring = false;
   bool _isCancelled = false;
   bool _isTransferComplete = false;
@@ -102,14 +103,19 @@ class _SenderScreenState extends State<SenderScreen> {
       });
 
       _webrtcService.onConnectionStateChange = (connected) {
-        if (mounted) {
-          setState(() {
-            _isConnected = connected;
-            _statusText = connected
-                ? 'Peer Connected! Ready to send.'
-                : 'Peer Disconnected';
-          });
+        if (!mounted) return;
+        if (!connected && (_isRelayFallback || _isTransferring)) {
+          // Suppress late WebRTC disconnect events — relay or active transfer takes priority
+          return;
         }
+        setState(() {
+          _isConnected = connected;
+          if (connected) {
+            _statusText = 'Connected via P2P! Ready to send.';
+          } else if (!_isRelayFallback) {
+            _statusText = 'Peer Disconnected';
+          }
+        });
       };
 
       _socketService.socket?.off('chunk-ack');
@@ -134,13 +140,13 @@ class _SenderScreenState extends State<SenderScreen> {
           await _webrtcService.initPeerConnection(_pin!, true);
           await _webrtcService.createAndSendOffer(_pin!);
 
-          // 10s Timeout for WebRTC connection
+          // 10s Timeout: if WebRTC never connects, enable relay mode so user can still click Start
           Future.delayed(const Duration(seconds: 10), () {
-            if (mounted && !_isConnected && _selectedPlatformFiles.isNotEmpty && !_isTransferring) {
+            if (mounted && !_isConnected && !_isTransferring) {
               setState(() {
-                _statusText = 'P2P timeout. Falling back to relay...';
+                _isRelayFallback = true;
+                _statusText = 'Connected via Relay. Ready to send.';
               });
-              _startTransferLoop();
             }
           });
         }
@@ -179,7 +185,10 @@ class _SenderScreenState extends State<SenderScreen> {
 
   Future<void> _startTransferLoop() async {
     if (_isTransferring) return;
-    setState(() => _isTransferring = true);
+    setState(() {
+      _isTransferring = true;
+      _isRelayFallback = _isRelayFallback; // preserve relay state
+    });
 
     for (int i = _currentFileIndex; i < _selectedPlatformFiles.length; i++) {
       if (_isCancelled) break;
@@ -376,6 +385,7 @@ class _SenderScreenState extends State<SenderScreen> {
       _progress = 0.0;
       _statusText = 'Select files or Drag & Drop';
       _isConnected = false;
+      _isRelayFallback = false;
       _isTransferring = false;
       _isCancelled = false;
     });
@@ -471,7 +481,7 @@ class _SenderScreenState extends State<SenderScreen> {
                         if (!_isTransferComplete) ...[
                           const SizedBox(height: 32),
                           ElevatedButton.icon(
-                            onPressed: (_pin == null || !_isConnected || _isTransferring) ? null : _startSending,
+                            onPressed: (_pin == null || (!_isConnected && !_isRelayFallback) || _isTransferring) ? null : _startSending,
                             icon: const Icon(Icons.rocket_launch_rounded),
                             label: Text(_isTransferring ? 'Sending...' : 'Start Transfer',
                                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -481,7 +491,7 @@ class _SenderScreenState extends State<SenderScreen> {
                               disabledBackgroundColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
                               disabledForegroundColor: isDark ? const Color(0xFF475569) : const Color(0xFF94A3B8),
                               padding: const EdgeInsets.symmetric(vertical: 20),
-                              elevation: (_pin == null || !_isConnected || _isTransferring) ? 0 : 8,
+                              elevation: (_pin == null || (!_isConnected && !_isRelayFallback) || _isTransferring) ? 0 : 8,
                               shadowColor: (isDark ? const Color(0xFF3B82F6) : const Color(0xFF2563EB)).withAlpha(100),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                             ),
