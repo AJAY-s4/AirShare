@@ -6,6 +6,7 @@ import 'services/socket_service.dart';
 final ValueNotifier<ThemeMode> appThemeNotifier =
     ValueNotifier(ThemeMode.system);
 
+// Entry point of the application
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
